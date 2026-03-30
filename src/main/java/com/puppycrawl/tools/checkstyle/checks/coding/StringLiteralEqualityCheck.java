@@ -29,36 +29,13 @@ import com.puppycrawl.tools.checkstyle.api.TokenTypes;
  * Checks that string literals are not used with <code>==</code> or <code>&#33;=</code>.
  * Since <code>==</code> will compare the object references, not the actual value of the strings,
  * <code>String.equals()</code> should be used.
- * More information can be found
- * <a href="https://stackoverflow.com/questions/513832/how-do-i-compare-strings-in-java/">
- * in this article</a>.
  * </div>
- *
- * <p>
- * Rationale: Novice Java programmers often use code like:
- * </p>
- * <div class="wrapper"><pre class="prettyprint"><code class="language-java">
- * if (x == "something")
- * </code></pre></div>
- *
- * <p>
- * when they mean
- * </p>
- * <div class="wrapper"><pre class="prettyprint"><code class="language-java">
- * if ("something".equals(x))
- * </code></pre></div>
- *
- * @since 3.2
- * @noinspection HtmlTagCanBeJavadocTag
- * @noinspectionreason HtmlTagCanBeJavadocTag - encoded symbols were not decoded
- *      when replaced with Javadoc tag
  */
 @StatelessCheck
 public class StringLiteralEqualityCheck extends AbstractCheck {
 
     /**
-     * A key is pointing to the warning message text in "messages.properties"
-     * file.
+     * A key is pointing to the warning message text in "messages.properties".
      */
     public static final String MSG_KEY = "string.literal.equality";
 
@@ -77,59 +54,73 @@ public class StringLiteralEqualityCheck extends AbstractCheck {
         return new int[] {TokenTypes.EQUAL, TokenTypes.NOT_EQUAL};
     }
 
-      private static boolean containsStringLiteral(DetailAST ast) {
-    if (ast == null) {
-        return false;
-    }
-
-    if (ast.getType() == TokenTypes.STRING_LITERAL) {
-        return true;
-    }
-
-    DetailAST child = ast.getFirstChild();
-    while (child != null) {
-        if (containsStringLiteral(child)) {
-            return true;
-        }
-        child = child.getNextSibling();
-    }
-
-    return false;
-}
-   
-
-   
-    
-    /**
-     * Checks whether string literal or text block literals are concatenated.
-     *
-     * @param ast ast
-     * @return {@code true} if string literal or text block literals are concatenated
-     */
-   private static boolean isStringLiteralExpression(DetailAST ast) {
-    if (ast == null) {
-        return false;
-    }
-
-    final int type = ast.getType();
-
-    // direct literal
-    if (type == TokenTypes.STRING_LITERAL
-            || type == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN) {
-        return true;
-    }
-
-    // concatenation: BOTH sides must be literals
-    if (type == TokenTypes.PLUS) {
+    @Override
+    public void visitToken(DetailAST ast) {
         final DetailAST left = ast.getFirstChild();
         final DetailAST right = left.getNextSibling();
 
-        return isStringLiteralExpression(left)
-                && isStringLiteralExpression(right);
+        // Detect string literal even inside nested expressions
+        if ((containsStringLiteral(left) && !isStringLiteralExpression(right))
+                || (containsStringLiteral(right) && !isStringLiteralExpression(left))) {
+            log(ast, MSG_KEY);
+        }
     }
 
-    return false;
-}
+    /**
+     * Recursively checks whether AST contains a string literal.
+     *
+     * @param ast AST node
+     * @return true if string literal exists
+     */
+    private static boolean containsStringLiteral(DetailAST ast) {
+        if (ast == null) {
+            return false;
+        }
 
-   
+        if (ast.getType() == TokenTypes.STRING_LITERAL) {
+            return true;
+        }
+
+        DetailAST child = ast.getFirstChild();
+        while (child != null) {
+            if (containsStringLiteral(child)) {
+                return true;
+            }
+            child = child.getNextSibling();
+        }
+
+        return false;
+    }
+
+    /**
+     * Checks whether expression is purely composed of string literals
+     * (including concatenation).
+     *
+     * @param ast AST node
+     * @return true if expression is string literal expression
+     */
+    private static boolean isStringLiteralExpression(DetailAST ast) {
+        if (ast == null) {
+            return false;
+        }
+
+        final int type = ast.getType();
+
+        // Direct literal
+        if (type == TokenTypes.STRING_LITERAL
+                || type == TokenTypes.TEXT_BLOCK_LITERAL_BEGIN) {
+            return true;
+        }
+
+        // Concatenation: both sides must be literals
+        if (type == TokenTypes.PLUS) {
+            final DetailAST left = ast.getFirstChild();
+            final DetailAST right = left.getNextSibling();
+
+            return isStringLiteralExpression(left)
+                    && isStringLiteralExpression(right);
+        }
+
+        return false;
+    }
 }
